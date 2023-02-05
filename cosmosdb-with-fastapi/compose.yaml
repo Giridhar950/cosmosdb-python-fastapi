@@ -1,0 +1,7 @@
+version: '3'
+
+services:
+  python-cosmos-app:
+     image: 'giridhar1998.azurecr.io/pythoncosmosdb:50'
+     ports:
+       - '80:3100'
