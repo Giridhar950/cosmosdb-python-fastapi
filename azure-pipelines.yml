@@ -1,0 +1,75 @@
+trigger:
+  branches:
+    include:
+    - master
+  paths:
+    exclude:
+    - azure-pipelines.yml
+
+
+resources:
+- repo: self
+
+variables:
+  - name: dockerRegistryServiceConnection
+    value: '32c25470-2c9c-4a2f-9349-1f132d59a8d9'
+  - name: imageRepository
+    value: 'giridharpythoncosmosdb'
+  - name: containerRegistry
+    value: 'giridhar1998.azurecr.io'
+  - name: dockerfilePath
+    value: '$(Build.SourcesDirectory)/cosmosdb-with-fastapi/Dockerfile'
+  - name: tag
+    value: '$(Build.BuildId)'
+
+stages:
+- stage: BuildAndPushDockerImage
+  displayName: Build and Push Docker image to Azure Container Registry
+  jobs:
+  - job: BuildAndpush
+    displayName: Build
+    pool:
+      name: default
+    steps:
+    - task: AzureKeyVault@2
+      displayName: Get secrets from Azure Key Vault
+      inputs:
+        azureSubscription: 'Free Trial (ff83516a-187c-4783-b639-97eb7f681cb0)'
+        KeyVaultName: 'python-cosmos-db-vault'
+        SecretsFilter: '*'
+        RunAsPreJob: true
+    - task: Docker@2
+      displayName: Build the python image
+      inputs:
+        containerRegistry: $(dockerRegistryServiceConnection)
+        repository: $(imageRepository)
+        command: 'build'
+        Dockerfile: $(dockerfilePath)
+        tags: '$(tag)'
+        arguments: '--build-arg DB_URI=$(uri) --build-arg DB_KEY=$(key) --build-arg INSIGHTS_KEY=$(insightskey)'
+    
+    - task: Docker@2
+      displayName: Push Docker image to ACR
+      inputs:
+        containerRegistry: $(dockerRegistryServiceConnection)
+        repository: $(imageRepository)
+        command: 'push'
+    
+- stage: DeployToContainerApp
+  displayName: Deploy Dockerized Python Application To Azure Container Apps
+  jobs:
+  - job: Deploy
+    displayName: Deploy Container App to Azure Web App for Container
+    pool:
+      name: default
+    steps:
+    - checkout: none
+    - task: AzureWebAppContainer@1
+      inputs:
+        azureSubscription: 'Free Trial (ff83516a-187c-4783-b639-97eb7f681cb0)'
+        appName: 'giridharwebapptest'
+        multicontainerConfigFile: '$(Build.SourcesDirectory)/cosmosdb-with-fastapi/compose.yaml'
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(Pipeline.Workspace)'
+        publishLocation: 'pipeline'
